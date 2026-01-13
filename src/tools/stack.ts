@@ -1,4 +1,4 @@
-import { executeCommand } from '../ssh.js';
+import { executeCommand, ProgressCallback } from '../ssh.js';
 import { ServerConfig } from '../config.js';
 
 export interface StackCreateParams {
@@ -40,11 +40,12 @@ export interface StackResult {
   output: string;
   stderr: string;
   exitCode: number;
-  deviceFlow: { verificationUri?: string; userCode?: string } | null;
+  deviceFlow: { verificationUri: string; userCode: string } | null;
+  pending: boolean;
   credentials: Record<string, string>;
 }
 
-export async function createStack(config: ServerConfig, params: StackCreateParams): Promise<StackPreview | StackResult> {
+export async function createStack(config: ServerConfig, params: StackCreateParams, onProgress?: ProgressCallback): Promise<StackPreview | StackResult> {
   // If not confirmed, return a preview of what will be created
   if (!params.confirm) {
     const preview = {
@@ -128,10 +129,20 @@ export async function createStack(config: ServerConfig, params: StackCreateParam
   const command = `faber stack create ${args.join(' ')}`;
   
   // Execute with longer timeout for stack creation (10 minutes)
-  const result = await executeCommand(config, command, 600000);
+  // Enable device flow detection to return GitHub auth prompts immediately
+  const result = await executeCommand(config, command, {
+    timeout: 600000,
+    debug: true,
+    detectDeviceFlow: true,
+    onProgress
+  });
   
-  // Parse stderr for GitHub Device Flow information
-  const deviceFlow = parseDeviceFlow(result.stderr);
+  // Use device flow from SSH result (detected in real-time) or parse from stderr
+  const parsedDeviceFlow = parseDeviceFlow(result.stderr);
+  const deviceFlow = result.deviceFlow || 
+    (parsedDeviceFlow?.verificationUri && parsedDeviceFlow?.userCode 
+      ? { verificationUri: parsedDeviceFlow.verificationUri, userCode: parsedDeviceFlow.userCode } 
+      : null);
   
   return {
     confirmed: true,
@@ -140,6 +151,7 @@ export async function createStack(config: ServerConfig, params: StackCreateParam
     stderr: result.stderr,
     exitCode: result.exitCode,
     deviceFlow,
+    pending: result.pending || false,
     credentials: parseStackCredentials(result.stdout)
   };
 }

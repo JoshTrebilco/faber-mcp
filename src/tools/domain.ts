@@ -18,7 +18,7 @@ export async function createDomain(config: ServerConfig, domain: string, app: st
   const result = await executeCommand(
     config,
     `faber domain create --domain=${domain} --app=${app}`,
-    300000 // 5 minutes for SSL certificate
+    { timeout: 300000 } // 5 minutes for SSL certificate
   );
   
   return {

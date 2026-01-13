@@ -5,7 +5,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ProgressNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { ProgressCallback } from './ssh.js';
 
 import { loadConfig, getServerConfig } from './config.js';
 import { checkApp, listApps, getDeployKey } from './tools/app.js';
@@ -401,7 +403,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 // Tool execution handler
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: args } = request.params;
 
   try {
@@ -432,7 +434,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
       case 'faber_create_stack': {
-        const result = await createStack(serverConfig, args as any);
+        // Get progress token from request metadata if provided
+        const progressToken = extra._meta?.progressToken;
+        
+        // Create progress callback that sends MCP progress notifications
+        const onProgress: ProgressCallback | undefined = progressToken ? 
+          async (message: string, progress?: number, total?: number) => {
+            try {
+              await extra.sendNotification({
+                method: 'notifications/progress',
+                params: {
+                  progressToken,
+                  progress: progress ?? 0,
+                  total,
+                  message
+                }
+              });
+            } catch (e) {
+              // Ignore notification errors
+              console.error('Failed to send progress notification:', e);
+            }
+          } : undefined;
+        
+        const result = await createStack(serverConfig, args as any, onProgress);
         
         // If preview mode (not confirmed), return the preview message
         if (!result.confirmed) {
@@ -446,18 +470,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
         
-        // If device flow detected, format it nicely
-        if (result.deviceFlow) {
+        // If device flow detected and pending, return auth instructions
+        if (result.deviceFlow && result.pending) {
+          const message = [
+            '═'.repeat(50),
+            '🔐 GitHub Authorization Required',
+            '═'.repeat(50),
+            '',
+            'The stack creation needs GitHub access to set up the deploy key.',
+            '',
+            '1. Open: ' + result.deviceFlow.verificationUri,
+            '2. Enter code: ' + result.deviceFlow.userCode,
+            '',
+            '─'.repeat(50),
+            '',
+            'After authorizing, the stack creation will continue automatically.',
+            'The command is running in the background on the server.',
+            '',
+            'Progress so far:',
+            result.output.replace(/\x1B\[[0-9;]*m/g, '').trim(),
+            '',
+            '═'.repeat(50),
+          ].join('\n');
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: message
+              }
+            ]
+          };
+        }
+        
+        // If device flow completed (not pending), show success with any device flow info
+        if (result.deviceFlow && !result.pending) {
           const message = [
             '='.repeat(50),
-            'GitHub Authorization Required',
-            '='.repeat(50),
-            '',
-            `1. Open: ${result.deviceFlow.verificationUri}`,
-            `2. Enter code: ${result.deviceFlow.userCode}`,
-            '',
-            'Waiting for authorization...',
-            '',
+            'GitHub Authorization Completed',
             '='.repeat(50),
             '',
             'Full output:',
