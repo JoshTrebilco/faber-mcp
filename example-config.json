@@ -1,0 +1,16 @@
+{
+  "defaultServer": "production",
+  "servers": {
+    "production": {
+      "host": "your-production-server.com",
+      "user": "root",
+      "keyPath": "~/.ssh/id_rsa",
+      "port": 22
+    },
+    "staging": {
+      "host": "staging.example.com",
+      "user": "root",
+      "keyPath": "~/.ssh/id_rsa"
+    }
+  }
+}
