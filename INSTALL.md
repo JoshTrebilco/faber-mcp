@@ -5,7 +5,7 @@
 ### 1. Install Dependencies and Build
 
 ```bash
-cd ~/Herd/faber-mcp
+cd ~/Code/faber-mcp
 npm install
 npm run build
 npm link  # Makes faber-mcp available globally
@@ -163,7 +163,7 @@ Look for any connection or authentication errors.
 ## Updating
 
 ```bash
-cd ~/Herd/faber-mcp
+cd ~/Code/faber-mcp
 git pull
 npm install
 npm run build

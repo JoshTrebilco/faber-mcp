@@ -5,7 +5,7 @@ Get up and running with Faber MCP in 5 minutes.
 ## 1. Install
 
 ```bash
-cd ~/Herd/faber-mcp
+cd ~/Code/faber-mcp
 npm install
 npm run build
 npm link
