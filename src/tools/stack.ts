@@ -13,9 +13,101 @@ export interface StackCreateParams {
   skipEnv?: boolean;
   skipDeploy?: boolean;
   skipReverb?: boolean;
+  confirm?: boolean;
 }
 
-export async function createStack(config: ServerConfig, params: StackCreateParams) {
+export interface StackPreview {
+  confirmed: false;
+  preview: {
+    user: string;
+    repository: string;
+    branch: string;
+    domain: string | null;
+    php: string;
+    dbname: string;
+    skipDb: boolean;
+    skipDomain: boolean;
+    skipEnv: boolean;
+    skipDeploy: boolean;
+    skipReverb: boolean;
+  };
+  message: string;
+}
+
+export interface StackResult {
+  confirmed: true;
+  success: boolean;
+  output: string;
+  stderr: string;
+  exitCode: number;
+  deviceFlow: { verificationUri?: string; userCode?: string } | null;
+  credentials: Record<string, string>;
+}
+
+export async function createStack(config: ServerConfig, params: StackCreateParams): Promise<StackPreview | StackResult> {
+  // If not confirmed, return a preview of what will be created
+  if (!params.confirm) {
+    const preview = {
+      user: params.user,
+      repository: params.repository,
+      branch: params.branch || 'main',
+      domain: params.domain || null,
+      php: params.php || '8.4',
+      dbname: params.dbname || params.user,
+      skipDb: params.skipDb || false,
+      skipDomain: params.skipDomain || false,
+      skipEnv: params.skipEnv || false,
+      skipDeploy: params.skipDeploy || false,
+      skipReverb: params.skipReverb || false,
+    };
+
+    const components = [];
+    components.push(`• App user: ${preview.user}`);
+    components.push(`• Repository: ${preview.repository}`);
+    components.push(`• Branch: ${preview.branch}`);
+    components.push(`• PHP version: ${preview.php}`);
+    
+    if (!preview.skipDomain) {
+      components.push(`• Domain: ${preview.domain || '(none specified)'}`);
+    } else {
+      components.push(`• Domain: (skipped)`);
+    }
+    
+    if (!preview.skipDb) {
+      components.push(`• Database: ${preview.dbname}`);
+    } else {
+      components.push(`• Database: (skipped)`);
+    }
+    
+    if (preview.skipEnv) components.push(`• .env configuration: (skipped)`);
+    if (preview.skipDeploy) components.push(`• Initial deployment: (skipped)`);
+    if (preview.skipReverb) components.push(`• Reverb WebSocket: (skipped)`);
+
+    const message = [
+      '═'.repeat(50),
+      'Stack Creation Preview',
+      '═'.repeat(50),
+      '',
+      'The following stack will be created:',
+      '',
+      ...components,
+      '',
+      '─'.repeat(50),
+      'To proceed, call this tool again with the same',
+      'parameters and set confirm: true',
+      '',
+      'To modify, update the parameters (user, domain,',
+      'etc.) and call again.',
+      '═'.repeat(50),
+    ].join('\n');
+
+    return {
+      confirmed: false,
+      preview,
+      message,
+    };
+  }
+
   // Build command with parameters
   const args = [];
   
@@ -42,6 +134,7 @@ export async function createStack(config: ServerConfig, params: StackCreateParam
   const deviceFlow = parseDeviceFlow(result.stderr);
   
   return {
+    confirmed: true,
     success: result.exitCode === 0,
     output: result.stdout,
     stderr: result.stderr,

@@ -68,7 +68,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'faber_create_stack',
-        description: 'Create a full application stack (app + domain + database + SSL + .env). Handles GitHub Device Flow OAuth for automatic deploy key setup if configured on server.',
+        description: 'Create a full application stack (app + domain + database + SSL + .env). Handles GitHub Device Flow OAuth for automatic deploy key setup if configured on server. First call shows a preview - set confirm: true to execute.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -115,6 +115,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             skipReverb: {
               type: 'boolean',
               description: 'Skip Reverb WebSocket configuration'
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Set to true to execute the stack creation. Without this, returns a preview of what will be created.'
             },
             server: {
               type: 'string',
@@ -429,6 +433,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'faber_create_stack': {
         const result = await createStack(serverConfig, args as any);
+        
+        // If preview mode (not confirmed), return the preview message
+        if (!result.confirmed) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: result.message
+              }
+            ]
+          };
+        }
         
         // If device flow detected, format it nicely
         if (result.deviceFlow) {
